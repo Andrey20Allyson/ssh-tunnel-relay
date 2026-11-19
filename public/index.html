@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SSH Tunnel Relay</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #f0f2f5;
+    --text: #1b1f24;
+    --muted: #5d6673;
+    --border: #dde1e7;
+    --accent: #0b7a5c;
+    --accent-text: #ffffff;
+    --code-bg: #14181d;
+    --code-text: #e6edf3;
+    --warn-bg: #fff6e0;
+    --warn-border: #f0c96a;
+    --ok: #12a150;
+    --bad: #d93a3a;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216;
+      --surface: #171b21;
+      --surface-2: #1f252d;
+      --text: #e6e9ee;
+      --muted: #9aa4b1;
+      --border: #2a313b;
+      --accent: #2bb38a;
+      --accent-text: #06120e;
+      --code-bg: #0a0d11;
+      --code-text: #e6edf3;
+      --warn-bg: #2a2412;
+      --warn-border: #6b5520;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 880px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  h1 { font-size: 26px; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 18px; margin: 0 0 4px; }
+  p { margin: 6px 0; }
+  .lead { color: var(--muted); margin: 0 0 24px; }
+  .status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--ok); }
+  .dot.bad { background: var(--bad); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin: 16px 0; }
+  .step { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 13px; margin-right: 8px; flex: none; }
+  .card-title { display: flex; align-items: center; }
+  .hint { color: var(--muted); font-size: 13.5px; }
+
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  input {
+    width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); font: inherit;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+  input.invalid { outline: 2px solid var(--bad); }
+  .err { color: var(--bad); font-size: 12.5px; min-height: 1em; margin-top: 2px; }
+
+  .tabs { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--surface-2); border-radius: 9px; margin-top: 12px; }
+  .tabs button {
+    border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 600; font-size: 14px;
+    padding: 7px 14px; border-radius: 7px; cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+  .cmd { margin: 12px 0 4px; }
+  .cmd-label { font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--muted); }
+  .code {
+    position: relative; background: var(--code-bg); color: var(--code-text); border-radius: 8px;
+    padding: 12px 88px 12px 14px; font: 13px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .copy {
+    position: absolute; top: 8px; right: 8px; border: 1px solid #3a434f; background: #232a33; color: #e6edf3;
+    font: 600 12px system-ui, sans-serif; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .copy:hover { background: #2d3640; }
+  .copy.done { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+
+  .note { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 8px; padding: 10px 12px; font-size: 13.5px; margin-top: 12px; }
+  .btn {
+    display: inline-block; margin-top: 8px; padding: 8px 14px; border-radius: 8px; background: var(--accent);
+    color: var(--accent-text); text-decoration: none; font-weight: 600; font-size: 14px;
+  }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; font-weight: 600; }
+  ul { margin: 6px 0; padding-left: 20px; }
+  li { margin: 3px 0; }
+  code.inline { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font: 13px ui-monospace, Consolas, monospace; }
+  .flow { font: 12.5px/1.5 ui-monospace, Consolas, monospace; color: var(--muted); white-space: pre; overflow-x: auto; margin: 8px 0 0; }
+  [hidden] { display: none !important; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 32px; text-align: center; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>SSH Tunnel Relay</h1>
+    <span class="status" id="status"><span class="dot" id="status-dot"></span><span id="status-text">verificando…</span></span>
+  </header>
+  <p class="lead">Acesse por SSH um computador que está atrás de NAT/CGNAT. Tudo passa por este relay via HTTPS, sem abrir portas no roteador.</p>
+
+  <!-- configuracao -->
+  <section class="card">
+    <div class="card-title"><h2>Configuração</h2></div>
+    <p class="hint">Preencha uma vez, e os comandos abaixo se atualizam sozinhos. Nada daqui é enviado ao servidor.</p>
+    <div class="fields">
+      <div>
+        <label for="f-id">Id do computador acessado</label>
+        <input id="f-id" value="casa" autocomplete="off" spellcheck="false">
+        <div class="err" id="e-id"></div>
+      </div>
+      <div>
+        <label for="f-user">Usuário do Windows nele</label>
+        <input id="f-user" placeholder="ex.: Acer" autocomplete="off" spellcheck="false">
+        <div class="err" id="e-user"></div>
+      </div>
+      <div>
+        <label for="f-port">Porta local (quem acessa)</label>
+        <input id="f-port" value="2222" inputmode="numeric" autocomplete="off">
+        <div class="err" id="e-port"></div>
+      </div>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Onde você vai colar os comandos">
+      <button role="tab" data-shell="ps">PowerShell</button>
+      <button role="tab" data-shell="cmd">cmd</button>
+      <button role="tab" data-shell="file">Arquivo .cmd</button>
+    </div>
+    <p class="hint" id="shell-hint"></p>
+  </section>
+
+  <!-- passo 1 -->
+  <section class="card">
+    <div class="card-title"><span class="step">1</span><h2>Preparar o computador que será acessado</h2></div>
+    <p>Precisa ser feito <strong>uma vez só</strong>: instala e liga o servidor SSH do Windows. Abra o <strong>PowerShell como Administrador</strong> e cole:</p>
+    <div class="cmd"><div class="code" data-cmd="install"></div></div>
+    <p class="hint">Para testar: <code class="inline">ssh SEU_USUARIO@localhost</code> nesse mesmo computador.</p>
+  </section>
+
+  <!-- passo 2 -->
+  <section class="card">
+    <div class="card-title"><span class="step">2</span><h2>Servir: no computador que será acessado</h2></div>
+    <p>Deixa este computador disponível com o id <strong data-bind="id"></strong>. A janela precisa ficar aberta; se a internet cair, ele reconecta sozinho.</p>
+    <div class="cmd" data-shell-only="ps cmd"><div class="cmd-label">Secret (opcional: senão o script pergunta)</div><div class="code" data-cmd="secret"></div></div>
+    <div class="cmd" data-shell-only="ps cmd"><div class="cmd-label">Comando</div><div class="code" data-cmd="serve"></div></div>
+    <div data-shell-only="file">
+      <p>Baixe e dê dois cliques:</p>
+      <a class="btn" data-href="serveFile" href="#">Baixar tunnel-serve.cmd</a>
+      <div class="cmd"><div class="cmd-label">ou, no cmd, baixar e executar</div><div class="code" data-cmd="serve"></div></div>
+    </div>
+  </section>
+
+  <!-- passo 3 -->
+  <section class="card">
+    <div class="card-title"><span class="step">3</span><h2>Conectar: no computador que vai acessar</h2></div>
+    <p>Abre o <code class="inline">ssh</code> direto no computador <strong data-bind="id"></strong><span data-bind-user-text></span>.</p>
+    <div class="cmd" data-shell-only="ps cmd"><div class="cmd-label">Secret (opcional: senão o script pergunta)</div><div class="code" data-cmd="secret"></div></div>
+    <div class="cmd" data-shell-only="ps cmd"><div class="cmd-label">Comando</div><div class="code" data-cmd="connect"></div></div>
+    <div data-shell-only="file">
+      <p>Baixe e dê dois cliques:</p>
+      <a class="btn" data-href="connectFile" href="#">Baixar tunnel-connect.cmd</a>
+      <div class="cmd"><div class="cmd-label">ou, no cmd, baixar e executar</div><div class="code" data-cmd="connect"></div></div>
+    </div>
+
+    <details>
+      <summary>Só abrir a porta local (para scp, VS Code Remote-SSH, WinSCP…)</summary>
+      <p>Em vez de abrir o ssh, deixa <code class="inline">127.0.0.1:<span data-bind="port"></span></code> apontando para o computador remoto enquanto a janela estiver aberta.</p>
+      <div class="cmd"><div class="cmd-label">Abrir a porta</div><div class="code" data-cmd="connectPort"></div></div>
+      <div class="cmd"><div class="cmd-label">Em outro terminal: ssh</div><div class="code" data-cmd="sshManual"></div></div>
+      <div class="cmd"><div class="cmd-label">Copiar arquivo (scp)</div><div class="code" data-cmd="scp"></div></div>
+      <div class="cmd"><div class="cmd-label">VS Code Remote-SSH / ~/.ssh/config</div><div class="code" data-cmd="sshConfig"></div></div>
+    </details>
+  </section>
+
+  <!-- ajuda -->
+  <section class="card">
+    <h2>Como funciona</h2>
+<pre class="flow">[quem acessa]                         [relay]                      [computador acessado]
+ssh -> 127.0.0.1:2222 -> connect  ==HTTPS/WebSocket==>  <==HTTPS/WebSocket==  serve -> 127.0.0.1:22 (sshd)</pre>
+    <p>Os dois lados só fazem conexões de <strong>saída</strong> para este relay (HTTPS), por isso funciona atrás de NAT, CGNAT e firewall. O SSH continua criptografado de ponta a ponta: o relay só repassa bytes.</p>
+    <details>
+      <summary>Problemas comuns</summary>
+      <ul>
+        <li><strong>“nenhum computador online com id …”</strong>: o passo 2 não está rodando nesse computador, ou o id está diferente.</li>
+        <li><strong>“serviço local 127.0.0.1:22 indisponível”</strong>: o servidor SSH não está instalado/ligado no computador acessado (passo 1).</li>
+        <li><strong>“secret inválido”</strong>: o secret não confere com o <code class="inline">TUNNEL_SECRET</code> do relay.</li>
+        <li><strong>“Acesso negado” no cmd</strong>: alguns antivírus bloqueiam <code class="inline">powershell -Command "irm … | iex"</code>. Use os comandos desta página (aba cmd), que usam outra forma.</li>
+        <li><strong>Aviso de chave do host mudou</strong>: o computador com esse id foi trocado/reinstalado. Remova a entrada antiga com <code class="inline">ssh-keygen -R <span data-bind="id"></span></code>.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>Segurança</summary>
+      <ul>
+        <li>Quem tem o secret consegue <em>chegar</em> até a tela de login do SSH, mas ainda precisa da senha (ou chave) do Windows.</li>
+        <li>Recomendado: usar login por chave SSH e desativar a senha (<code class="inline">PasswordAuthentication no</code> em <code class="inline">C:\ProgramData\ssh\sshd_config</code>).</li>
+        <li>Não coloque o secret na URL: ela fica registrada nos logs do proxy.</li>
+      </ul>
+    </details>
+  </section>
+
+  <footer>Status em <a href="/health">/health</a> · comandos em texto: <code class="inline">curl <span data-bind="base"></span></code></footer>
+</main>
+
+<script>
+(() => {
+  const base = location.origin;
+  const ID_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+  const USER_RE = /^[A-Za-z0-9_.@\\ -]{1,64}$/;
+  const store = {
+    get(k) { try { return localStorage.getItem('tunnel.' + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem('tunnel.' + k, v); } catch { /* sem storage */ } },
+  };
+
+  const f = { id: document.getElementById('f-id'), user: document.getElementById('f-user'), port: document.getElementById('f-port') };
+  for (const k of Object.keys(f)) { const v = store.get(k); if (v !== null) f[k].value = v; }
+  let shell = store.get('shell') || 'ps';
+
+  const qs = (obj) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(obj)) if (v) p.set(k, v);
+    const s = p.toString();
+    return s ? '?' + s : '';
+  };
+
+  function values() {
+    const id = f.id.value.trim();
+    const user = f.user.value.trim();
+    const port = f.port.value.trim();
+    const errors = {
+      id: id && !ID_RE.test(id) ? 'use só letras, números, ponto, _ ou -' : (!id ? 'obrigatório' : ''),
+      user: user && !USER_RE.test(user) ? 'caractere não permitido' : '',
+      port: port && !(/^\d+$/.test(port) && +port > 0 && +port < 65536) ? 'porta inválida' : '',
+    };
+    return {
+      id: errors.id ? 'casa' : id,
+      user: errors.user ? '' : user,
+      port: errors.port || !port ? '2222' : port,
+      errors,
+    };
+  }
+
+  function build(v) {
+    const portQ = v.port !== '2222' ? v.port : '';
+    const serveQ = qs({ id: v.id });
+    const connectQ = qs({ id: v.id, user: v.user, port: portQ });
+    const userOrPlaceholder = v.user || 'SEU_USUARIO';
+    const sb = (url, extra = '') => `& ([scriptblock]::Create((irm '${url}')))${extra}`;
+    const cmdWrap = (inner) => `powershell -NoProfile -Command "${inner}"`;
+
+    const byShell = {
+      ps: {
+        secret: `$env:TUNNEL_SECRET = 'SEU_SECRET'`,
+        serve: `irm "${base}/serve.ps1${serveQ}" | iex`,
+        connect: `irm "${base}/connect.ps1${connectQ}" | iex`,
+        connectPort: sb(`${base}/connect.ps1${qs({ id: v.id })}`, ` -NoSsh -LocalPort ${v.port}`),
+      },
+      cmd: {
+        secret: `set "TUNNEL_SECRET=SEU_SECRET"`,
+        serve: cmdWrap(sb(`${base}/serve.ps1${serveQ}`)),
+        connect: cmdWrap(sb(`${base}/connect.ps1${connectQ}`)),
+        connectPort: cmdWrap(sb(`${base}/connect.ps1${qs({ id: v.id })}`, ` -NoSsh -LocalPort ${v.port}`)),
+      },
+      file: {
+        secret: `set "TUNNEL_SECRET=SEU_SECRET"`,
+        serve: `curl -o tunnel-serve.cmd "${base}/serve.cmd${serveQ}" && .\\tunnel-serve.cmd`,
+        connect: `curl -o tunnel-connect.cmd "${base}/connect.cmd${connectQ}" && .\\tunnel-connect.cmd`,
+        connectPort: cmdWrap(sb(`${base}/connect.ps1${qs({ id: v.id })}`, ` -NoSsh -LocalPort ${v.port}`)),
+      },
+    };
+
+    return {
+      ...byShell[shell],
+      install: [
+        'Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0',
+        'Start-Service sshd',
+        'Set-Service -Name sshd -StartupType Automatic',
+      ].join('\n'),
+      sshManual: `ssh -o HostKeyAlias=${v.id} -p ${v.port} ${userOrPlaceholder}@127.0.0.1`,
+      scp: `scp -o HostKeyAlias=${v.id} -P ${v.port} arquivo.txt ${userOrPlaceholder}@127.0.0.1:Desktop/`,
+      sshConfig: [
+        `Host ${v.id}`,
+        `    HostName 127.0.0.1`,
+        `    Port ${v.port}`,
+        `    User ${userOrPlaceholder}`,
+        `    HostKeyAlias ${v.id}`,
+      ].join('\n'),
+      serveFile: `${base}/serve.cmd${serveQ}`,
+      connectFile: `${base}/connect.cmd${connectQ}`,
+    };
+  }
+
+  const hints = {
+    ps: 'Comandos para colar em uma janela do PowerShell.',
+    cmd: 'Comandos para colar no Prompt de Comando (cmd).',
+    file: 'Arquivos .cmd prontos: baixe e dê dois cliques, ou baixe e execute pelo cmd.',
+  };
+
+  function render() {
+    const v = values();
+    for (const k of ['id', 'user', 'port']) {
+      document.getElementById('e-' + k).textContent = v.errors[k];
+      f[k].classList.toggle('invalid', !!v.errors[k] && !(k === 'id' && !f.id.value.trim()));
+    }
+    const c = build(v);
+
+    document.querySelectorAll('[data-cmd]').forEach((el) => {
+      let pre = el.querySelector('span.txt');
+      if (!pre) {
+        pre = document.createElement('span');
+        pre.className = 'txt';
+        el.appendChild(pre);
+        const btn = document.createElement('button');
+        btn.className = 'copy';
+        btn.type = 'button';
+        btn.textContent = 'Copiar';
+        btn.addEventListener('click', () => copy(pre.textContent, btn));
+        el.appendChild(btn);
+      }
+      pre.textContent = c[el.dataset.cmd];
+    });
+    document.querySelectorAll('[data-href]').forEach((a) => { a.href = c[a.dataset.href]; });
+    document.querySelectorAll('[data-bind]').forEach((el) => {
+      el.textContent = el.dataset.bind === 'base' ? base : v[el.dataset.bind];
+    });
+    document.querySelectorAll('[data-bind-user-text]').forEach((el) => {
+      el.textContent = v.user ? ` como ${v.user}` : ' (sem usuário, o script pergunta)';
+    });
+    document.querySelectorAll('[data-shell-only]').forEach((el) => {
+      el.hidden = !el.dataset.shellOnly.split(' ').includes(shell);
+    });
+    document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.shell === shell)));
+    document.getElementById('shell-hint').textContent = hints[shell];
+  }
+
+  async function copy(text, btn) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch { /* ignore */ }
+      ta.remove();
+    }
+    btn.textContent = 'Copiado!';
+    btn.classList.add('done');
+    setTimeout(() => { btn.textContent = 'Copiar'; btn.classList.remove('done'); }, 1500);
+  }
+
+  for (const k of Object.keys(f)) {
+    f[k].addEventListener('input', () => { store.set(k, f[k].value); render(); });
+  }
+  document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+    shell = b.dataset.shell;
+    store.set('shell', shell);
+    render();
+  }));
+
+  async function health() {
+    const dot = document.getElementById('status-dot');
+    const txt = document.getElementById('status-text');
+    try {
+      const r = await fetch('/health', { cache: 'no-store' });
+      const h = await r.json();
+      dot.className = 'dot ok';
+      const n = h.hostsOnline;
+      txt.textContent = `relay online · ${n} computador${n === 1 ? '' : 'es'} servindo · ${h.activeSessions} ${h.activeSessions === 1 ? 'sessão ativa' : 'sessões ativas'}`;
+    } catch {
+      dot.className = 'dot bad';
+      txt.textContent = 'relay inacessível';
+    }
+  }
+
+  render();
+  health();
+  setInterval(health, 15000);
+})();
+</script>
+</body>
+</html>

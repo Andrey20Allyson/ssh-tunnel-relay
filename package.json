@@ -1,0 +1,16 @@
+{
+  "name": "ssh-tunnel-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Relay de tunel TCP/SSH sobre WebSocket, exposto em uma unica porta HTTP",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
